@@ -49,10 +49,89 @@ void handleStdinRedirection(const int i, char *args[]) {
   open(args[i + 1], O_RDONLY);
 }
 
+void handlePsSequence(const int i, char *args[]) {
+  args[i] = NULL;
+  pid_t pid2 = fork();
+  int status2;
+  switch (pid2) {
+  case -1:
+    perror("fork");
+    exit(1);
+  case 0:
+    execvp(args[0], args);
+    exit(0);
+    break;
+  default:
+    waitpid(pid2, &status2, 0);
+    execvp(args[i + 1], &args[i + 1]);
+    exit(0);
+    break;
+  }
+}
+
+void handlePsParallel(const int i, char *args[]) {
+  args[i] = NULL;
+  pid_t pid2 = fork();
+  switch (pid2) {
+  case -1:
+    perror("fork");
+    exit(1);
+  case 0:
+    execvp(args[i + 1], &args[i + 1]);
+    exit(0);
+  default:
+    execvp(args[0], args);
+    exit(0);
+    break;
+  }
+}
+
+void handlePsAnd(const int i, char *args[]) {
+  args[i] = NULL;
+  pid_t pidPs = fork();
+  int statusPs;
+  switch (pidPs) {
+  case -1:
+    perror("fork");
+    exit(1);
+  case 0:
+    execvp(args[0], args);
+    exit(0);
+  default:
+    waitpid(pidPs, &statusPs, 0);
+    if (statusPs == 0) {
+      execvp(args[i + 1], &args[i + 1]);
+    }
+    exit(0);
+    break;
+  }
+}
+
+void handlePsOr(const int i, char *args[]) {
+  args[i] = NULL;
+  pid_t pidPs = fork();
+  int statusPs;
+  switch (pidPs) {
+  case -1:
+    perror("fork");
+    exit(1);
+  case 0:
+    execvp(args[0], args);
+    exit(0);
+  default:
+    waitpid(pidPs, &statusPs, 0);
+    if (statusPs > 0) {
+      execvp(args[i + 1], &args[i + 1]);
+    }
+    exit(0);
+    break;
+  }
+}
+
 int main(int argc, char *argv[]) {
-  int status;
   char command[MAX];
   char *args[MAX];
+  int status;
 
   while (1) {
     pid_t pid = fork();
@@ -79,7 +158,16 @@ int main(int argc, char *argv[]) {
           handleStderrRedirection(i, args);
         } else if (strcmp(args[i], "2>>") == 0) {
           handleStderrAppendRedirection(i, args);
-        } 
+        } else if (strcmp(args[i], ";") == 0) {
+          handlePsSequence(i, args);
+        } else if (strcmp(args[i], "&") == 0) {
+          handlePsParallel(i, args);
+        } else if (strcmp(args[i], "&&") == 0) {
+          handlePsAnd(i, args);
+        } else if (strcmp(args[i], "||") == 0) {
+          handlePsOr(i, args);
+        }
+
         i++;
       }
       if (execvp(args[0], args) < 0) {
