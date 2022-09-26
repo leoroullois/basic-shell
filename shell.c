@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -215,36 +216,55 @@ void executeCommand(char *args[]) {
     i++;
   }
 
-  if (execvp(args[0], args) < 0) {
-    printf("Command not found\n");
-  }
-
-  if (strcmp(args[0], "cd")) {
-    // TODO: handle cd
+  if (strcmp(args[0], "cd") != 0) {
+    if (execvp(args[0], args) < 0) {
+      printf("Command not found\n");
+    }
   }
 }
 
+void sigIntHandler() {
+  printf("test");
+  exit(0);
+}
+
 int main(int argc, char *argv[]) {
+  signal(SIGINT, SIG_IGN);
+  signal(SIGTSTP, SIG_IGN);
+
   while (1) {
-    pid_t pid = fork();
-    int status;
-    switch (pid) {
-    case -1:
-      perror("fork");
-      exit(1);
-    case 0:
-      printf("> ");
-      char command[MAX_CHAR];
-      char *args[MAX_ARGS];
-      fgets(command, MAX_ARGS, stdin);
-      split(command, args);
+    printf("> ");
 
-      executeCommand(args);
+    char command[MAX_CHAR];
+    char *args[MAX_ARGS];
+    fgets(command, MAX_ARGS, stdin);
+    split(command, args);
 
-      exit(0);
-    default:
-      waitpid(pid, &status, 0);
-      continue;
+    if (strcmp(args[0], "cd") == 0) {
+      chdir(args[1]);
+    } else {
+      pid_t pid = fork();
+      int status;
+
+      switch (pid) {
+      case -1:
+        perror("fork");
+        exit(1);
+      case 0: {
+        signal(SIGINT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+
+        
+        if (strcmp(args[0], "exit") == 0) {
+          printf("Exiting shell...\n");
+          kill(pid, SIGKILL);
+        }
+
+        executeCommand(args);
+      }
+      default:
+        waitpid(pid, &status, 0);
+      }
     }
   }
   return 0;
